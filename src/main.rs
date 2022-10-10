@@ -74,7 +74,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     query_filename: P,
     matchlist: P,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let max_hash = max_hash_for_scaled(1000 as u64);
+    let max_hash = max_hash_for_scaled(100000 as u64);
     let template_mh = KmerMinHash::builder()
         .num(0u32)
         .ksize(31 as u32)
@@ -163,7 +163,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         }
     }
 
-    println!("remaining: {}", query.size());
+    println!("remaining: {} {}", query.size(), filtered_sketches.len());
     
     Ok(())
 }
