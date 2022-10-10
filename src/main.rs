@@ -189,7 +189,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
                 let containment = searchsig.count_common(&query, false);
                 if let Ok(containment) = containment {
                     if containment > 0 {
-                        mm = Some((*name, *searchsig, containment))
+                        mm = Some((*name, *searchsig, containment));
                     }
                 }
                 mm
