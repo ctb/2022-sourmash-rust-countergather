@@ -148,13 +148,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         return Ok(());
     }
 
-    // this seems like it should be unnecessary - but at least for now,
-    // I can't figure out how to continue working with matchlist below
-    // without converting like this.
-    let mut matching_sketches: Vec<(&String, &KmerMinHash, u64)> = matchlist
-        .par_iter()
-        .map(|(name, searchsig, containment)| (name, searchsig, *containment))
-        .collect();
+    let mut matching_sketches = matchlist;
 
     // loop until no more matching sketches -
     while !matching_sketches.is_empty() {
@@ -183,13 +177,13 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
 
         // recalculate remaining containments between query and all sketches.
         matching_sketches = matching_sketches
-            .par_iter()
+            .into_par_iter()
             .filter_map(|(name, searchsig, _)| {
                 let mut mm = None;
                 let containment = searchsig.count_common(&query, false);
                 if let Ok(containment) = containment {
                     if containment > 0 {
-                        mm = Some((*name, *searchsig, containment));
+                        mm = Some((name, searchsig, containment));
                     }
                 }
                 mm
