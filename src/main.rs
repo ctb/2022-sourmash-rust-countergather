@@ -1,10 +1,15 @@
 use clap::Parser;
+
 use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader};
 use std::fs::File;
+
 use sourmash::signature::{Signature, SigsTrait};
 use sourmash::sketch::minhash::{max_hash_for_scaled, KmerMinHash};
 use sourmash::sketch::Sketch;
+
+// use rayon::prelude::*;
+
 // use std::collections::HashMap;
 
 #[derive(Parser, Debug)]
@@ -101,7 +106,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     let matchlist_file = BufReader::new(File::open(matchlist)?);
 
     // load all the sketches listed in file & compatible with template_mh
-    let matchlist: Vec<(String, KmerMinHash)> = matchlist_file
+    let matchlist: Vec<(String, KmerMinHash, i32)> = matchlist_file
         .lines()
         .filter_map(|line| {
             let line = line.unwrap();
@@ -120,7 +125,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
             let mut mm = None;
             for sig in &sigs {
                 if let Some(mh) = prepare_query(sig, &template) {
-                    mm = Some((sig.name(), mh.clone()));
+                    mm = Some((sig.name(), mh.clone(), 0));
                 }
             }
             mm
@@ -132,39 +137,50 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         return Ok(());
     }
 
-    let mut matching_sketches = Vec::new();
+    loop {
+        // calculate all containments between query and sketch
+        let mut matching_sketches: Vec<(&String, &KmerMinHash, u64)> =
+            matchlist
+            .iter()
+            .filter_map(|(name, searchsig, _)| {
+                let containment = searchsig.count_common(&query, false);
+                if let Ok(containment) = containment {
+                    if containment > 0 {
+                        Some((name, searchsig, containment))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }).collect();
 
-    let mut results = vec![];
-    let mut best_containment = 0;
-    let mut best_position : Option<usize> = None;
-    let mut position : usize = 0;
-    for (name, searchsig) in &matchlist {
-        let containment = searchsig.count_common(&query, false).unwrap();
-        if containment > 0 {
-            results.push((name.clone(), containment));
-            matching_sketches.push(searchsig);
-            println!("{} - {}", name, containment);
-            if containment > best_containment {
+        if matching_sketches.is_empty() {
+            break;
+        }
+
+        // find the best
+        let mut best_containment : u64 = 0;
+        let mut best_position : Option<usize> = None;
+        for (position, element) in matching_sketches.iter().enumerate() {
+            let (_, _, c) = element;
+            if *c > best_containment {
                 best_position = Some(position);
+                best_containment = *c;
             }
-            position += 1;
         }
+
+        println!("remaining: {} {}", query.size(), matching_sketches.len());
+
+        let best_position = best_position.unwrap();
+        let (name, best_sig, containment) = matching_sketches.get(best_position).unwrap();
+        println!("removing {}", name);
+        query.remove_from(best_sig);
+
+        let matchlist = matching_sketches;
     }
-
-    let best_sig = matching_sketches.get(best_position.unwrap());
-    query.remove_from(best_sig.unwrap());
-
-    let mut filtered_sketches = Vec::new();
-    for searchsig in &matching_sketches {
-        let containment = searchsig.count_common(&query, false).unwrap();
-        if containment > 0 {
-            filtered_sketches.push(searchsig);
-            println!("{}", containment);
-        }
-    }
-
-    println!("remaining: {} {}", query.size(), filtered_sketches.len());
     
+
     Ok(())
 }
 
