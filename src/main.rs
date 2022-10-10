@@ -125,7 +125,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     let matchlist: Vec<(String, KmerMinHash, u64)> = matchlist_paths
         .par_iter()
         .filter_map(|m| {
-            let sigs = Signature::from_path(dbg!(m)).unwrap();
+            let sigs = Signature::from_path(m).unwrap();
 
             let mut mm = None;
             for sig in &sigs {
