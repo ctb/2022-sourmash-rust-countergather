@@ -106,7 +106,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     let matchlist_file = BufReader::new(File::open(matchlist)?);
 
     // load all the sketches listed in file & compatible with template_mh
-    let matchlist: Vec<(String, KmerMinHash, i32)> = matchlist_file
+    let matchlist_paths: Vec<PathBuf> = matchlist_file
         .lines()
         .filter_map(|line| {
             let line = line.unwrap();
@@ -118,7 +118,10 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
             } else {
                 None
             }
-        })
+        }).collect();
+
+    let matchlist: Vec<(String, KmerMinHash, i32)> = matchlist_paths
+        .par_iter()
         .filter_map(|m| {
             let sigs = Signature::from_path(dbg!(m)).unwrap();
 
