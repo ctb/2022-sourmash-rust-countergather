@@ -5,6 +5,7 @@ use std::fs::File;
 use sourmash::signature::{Signature, SigsTrait};
 use sourmash::sketch::minhash::{max_hash_for_scaled, KmerMinHash};
 use sourmash::sketch::Sketch;
+// use std::collections::HashMap;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -70,7 +71,7 @@ fn prepare_query(search_sig: &Signature, template: &Sketch) -> Option<KmerMinHas
 }
 
 fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
-    query: P,
+    query_filename: P,
     matchlist: P,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let max_hash = max_hash_for_scaled(1000 as u64);
@@ -82,8 +83,8 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     let template = Sketch::MinHash(template_mh);
 
     println!("Loading query");
-    let query = {
-        let sigs = Signature::from_path(dbg!(query)).unwrap();
+    let mut query = {
+        let sigs = Signature::from_path(dbg!(query_filename)).unwrap();
 
         let mut mm = None;
         for sig in &sigs {
@@ -131,14 +132,38 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         return Ok(());
     }
 
+    let mut matching_sketches = Vec::new();
+
     let mut results = vec![];
+    let mut best_containment = 0;
+    let mut best_position : Option<usize> = None;
+    let mut position : usize = 0;
     for (name, searchsig) in &matchlist {
         let containment = searchsig.count_common(&query, false).unwrap();
         if containment > 0 {
             results.push((name.clone(), containment));
+            matching_sketches.push(searchsig);
             println!("{} - {}", name, containment);
+            if containment > best_containment {
+                best_position = Some(position);
+            }
+            position += 1;
         }
     }
+
+    let best_sig = matching_sketches.get(best_position.unwrap());
+    query.remove_from(best_sig.unwrap());
+
+    let mut filtered_sketches = Vec::new();
+    for searchsig in &matching_sketches {
+        let containment = searchsig.count_common(&query, false).unwrap();
+        if containment > 0 {
+            filtered_sketches.push(searchsig);
+            println!("{}", containment);
+        }
+    }
+
+    println!("remaining: {}", query.size());
     
     Ok(())
 }
