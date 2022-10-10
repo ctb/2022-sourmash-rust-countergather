@@ -8,7 +8,7 @@ use sourmash::signature::{Signature, SigsTrait};
 use sourmash::sketch::minhash::{max_hash_for_scaled, KmerMinHash};
 use sourmash::sketch::Sketch;
 
-// use rayon::prelude::*;
+use rayon::prelude::*;
 
 // use std::collections::HashMap;
 
@@ -141,7 +141,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         // calculate all containments between query and sketch
         let mut matching_sketches: Vec<(&String, &KmerMinHash, u64)> =
             matchlist
-            .iter()
+            .par_iter()
             .filter_map(|(name, searchsig, _)| {
                 let containment = searchsig.count_common(&query, false);
                 if let Ok(containment) = containment {
