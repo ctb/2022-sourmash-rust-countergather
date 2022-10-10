@@ -121,7 +121,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         })
         .collect();
 
-    // load the sketches in parallel.
+    // load the sketches in parallel; keep only those with some match.
     let matchlist: Vec<(String, KmerMinHash, u64)> = matchlist_paths
         .par_iter()
         .filter_map(|m| {
@@ -133,7 +133,8 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
                     let containment = mh.count_common(&query, false);
                     if let Ok(containment) = containment {
                         if containment > 0 {
-                            mm = Some((sig.name(), mh, containment))
+                            mm = Some((sig.name(), mh, containment));
+                            break;
                         }
                     }
                 }
