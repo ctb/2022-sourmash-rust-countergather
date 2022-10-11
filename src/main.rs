@@ -74,6 +74,12 @@ fn prepare_query(search_sig: &Signature, template: &Sketch) -> Option<KmerMinHas
     search_mh
 }
 
+struct PrefetchResult {
+    name: String,
+    minhash: KmerMinHash,
+    containment: u64,
+}
+
 fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     query_filename: P,
     matchlist: P,
@@ -122,7 +128,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         .collect();
 
     // load the sketches in parallel; keep only those with some match.
-    let matchlist: Vec<(String, KmerMinHash, u64)> = matchlist_paths
+    let matchlist: Vec<PrefetchResult> = matchlist_paths
         .par_iter()
         .filter_map(|m| {
             let sigs = Signature::from_path(m).unwrap();
@@ -133,7 +139,11 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
                     let containment = mh.count_common(&query, false);
                     if let Ok(containment) = containment {
                         if containment > 0 {
-                            mm = Some((sig.name(), mh, containment));
+                            let result = PrefetchResult {
+                                name: sig.name(), minhash: mh,
+                                containment: containment
+                            };
+                            mm = Some(result);
                             break;
                         }
                     }
@@ -160,10 +170,9 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         let mut best_containment: u64 = 0;
         let mut best_position: Option<usize> = None;
         for (position, element) in matching_sketches.iter().enumerate() {
-            let (_, _, c) = element;
-            if *c > best_containment {
+            if element.containment > best_containment {
                 best_position = Some(position);
-                best_containment = *c;
+                best_containment = element.containment;
             }
         }
 
@@ -171,19 +180,24 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         let best_position = best_position.unwrap();
         let best_entry = matching_sketches.get(best_position);
 
-        let (name, best_sig, _) = best_entry.unwrap();
-        println!("removing {}", name);
-        query.remove_from(best_sig)?;
+        let best_entry = best_entry.unwrap();
+        println!("removing {}", best_entry.name);
+        query.remove_from(&best_entry.minhash)?;
 
         // recalculate remaining containments between query and all sketches.
         matching_sketches = matching_sketches
             .into_par_iter()
-            .filter_map(|(name, searchsig, _)| {
+            .filter_map(|result| {
                 let mut mm = None;
+                let searchsig = &result.minhash;
                 let containment = searchsig.count_common(&query, false);
                 if let Ok(containment) = containment {
                     if containment > 0 {
-                        mm = Some((name, searchsig, containment));
+                        let result = PrefetchResult {
+                            containment: containment,
+                            ..result
+                        };
+                        mm = Some(result);
                     }
                 }
                 mm
