@@ -140,8 +140,9 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
                     if let Ok(containment) = containment {
                         if containment > 0 {
                             let result = PrefetchResult {
-                                name: sig.name(), minhash: mh,
-                                containment: containment
+                                name: sig.name(),
+                                minhash: mh,
+                                containment: containment,
                             };
                             mm = Some(result);
                             break;
@@ -168,11 +169,16 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         let first_element = matching_sketches.iter().next().unwrap();
 
         // find best containment
-        let best_element = matching_sketches
-            .par_iter()
-            .reduce(|| first_element, |accum, item| {
-                if accum.containment > item.containment { accum } else { item }
-            });
+        let best_element = matching_sketches.par_iter().reduce(
+            || first_element,
+            |accum, item| {
+                if accum.containment > item.containment {
+                    accum
+                } else {
+                    item
+                }
+            },
+        );
 
         // remove!
         println!("removing {}", best_element.name);
