@@ -4,6 +4,11 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+use std::collections::BinaryHeap;
+
+use std::cmp::PartialOrd;
+use std::cmp::Ordering;
+
 use sourmash::signature::{Signature, SigsTrait};
 use sourmash::sketch::minhash::{max_hash_for_scaled, KmerMinHash};
 use sourmash::sketch::Sketch;
@@ -80,6 +85,32 @@ struct PrefetchResult {
     containment: u64,
 }
 
+impl Ord for PrefetchResult {
+    fn cmp(&self, other: &PrefetchResult) -> Ordering {
+        if self.containment < other.containment {
+            Ordering::Less
+        } else if self.containment > other.containment {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl PartialOrd for PrefetchResult {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for PrefetchResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.containment == other.containment
+    }
+}
+
+impl Eq for PrefetchResult {}
+
 fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     query_filename: P,
     matchlist: P,
@@ -128,7 +159,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         .collect();
 
     // load the sketches in parallel; keep only those with some match.
-    let matchlist: Vec<PrefetchResult> = matchlist_paths
+    let matchlist: BinaryHeap<PrefetchResult> = matchlist_paths
         .par_iter()
         .filter_map(|m| {
             let sigs = Signature::from_path(m).unwrap();
@@ -164,21 +195,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     // loop until no more matching sketches -
     while !matching_sketches.is_empty() {
         println!("remaining: {} {}", query.size(), matching_sketches.len());
-
-        // provide a starting element for rayon reduce
-        let first_element = matching_sketches.iter().next().unwrap();
-
-        // find best containment
-        let best_element = matching_sketches.par_iter().reduce(
-            || first_element,
-            |accum, item| {
-                if accum.containment > item.containment {
-                    accum
-                } else {
-                    item
-                }
-            },
-        );
+        let best_element = matching_sketches.peek().unwrap();
 
         // remove!
         println!("removing {}", best_element.name);
