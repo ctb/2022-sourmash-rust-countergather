@@ -164,25 +164,19 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     while !matching_sketches.is_empty() {
         println!("remaining: {} {}", query.size(), matching_sketches.len());
 
-        // find the match with a best containment.
-        // this should be unnecessary if we record best match in the previous
-        // loop.
-        let mut best_containment: u64 = 0;
-        let mut best_position: Option<usize> = None;
-        for (position, element) in matching_sketches.iter().enumerate() {
-            if element.containment > best_containment {
-                best_position = Some(position);
-                best_containment = element.containment;
-            }
-        }
+        // provide a starting element for rayon reduce
+        let first_element = matching_sketches.iter().next().unwrap();
 
-        // remove the best match hashes from the query.
-        let best_position = best_position.unwrap();
-        let best_entry = matching_sketches.get(best_position);
+        // find best containment
+        let best_element = matching_sketches
+            .par_iter()
+            .reduce(|| first_element, |accum, item| {
+                if accum.containment > item.containment { accum } else { item }
+            });
 
-        let best_entry = best_entry.unwrap();
-        println!("removing {}", best_entry.name);
-        query.remove_from(&best_entry.minhash)?;
+        // remove!
+        println!("removing {}", best_element.name);
+        query.remove_from(&best_element.minhash)?;
 
         // recalculate remaining containments between query and all sketches.
         matching_sketches = matching_sketches
