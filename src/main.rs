@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use std::collections::BinaryHeap;
 
-use std::cmp::PartialOrd;
 use std::cmp::Ordering;
+use std::cmp::PartialOrd;
 
 use sourmash::signature::{Signature, SigsTrait};
 use sourmash::sketch::minhash::{max_hash_for_scaled, KmerMinHash};
@@ -111,6 +111,30 @@ impl PartialEq for PrefetchResult {
 
 impl Eq for PrefetchResult {}
 
+fn prefetch(
+    query: &KmerMinHash,
+    sketchlist: BinaryHeap<PrefetchResult>,
+) -> BinaryHeap<PrefetchResult> {
+    sketchlist
+        .into_par_iter()
+        .filter_map(|result| {
+            let mut mm = None;
+            let searchsig = &result.minhash;
+            let containment = searchsig.count_common(&query, false);
+            if let Ok(containment) = containment {
+                if containment > 0 {
+                    let result = PrefetchResult {
+                        containment: containment,
+                        ..result
+                    };
+                    mm = Some(result);
+                }
+            }
+            mm
+        })
+        .collect()
+}
+
 fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     query_filename: P,
     matchlist: P,
@@ -167,8 +191,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
             let mut mm = None;
             for sig in &sigs {
                 if let Some(mh) = prepare_query(sig, &template) {
-                    let containment = mh.count_common(&query, false);
-                    if let Ok(containment) = containment {
+                    if let Ok(containment) = mh.count_common(&query, false) {
                         if containment > 0 {
                             let result = PrefetchResult {
                                 name: sig.name(),
@@ -202,24 +225,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
         query.remove_from(&best_element.minhash)?;
 
         // recalculate remaining containments between query and all sketches.
-        matching_sketches = matching_sketches
-            .into_par_iter()
-            .filter_map(|result| {
-                let mut mm = None;
-                let searchsig = &result.minhash;
-                let containment = searchsig.count_common(&query, false);
-                if let Ok(containment) = containment {
-                    if containment > 0 {
-                        let result = PrefetchResult {
-                            containment: containment,
-                            ..result
-                        };
-                        mm = Some(result);
-                    }
-                }
-                mm
-            })
-            .collect();
+        matching_sketches = prefetch(&query, matching_sketches);
     }
 
     Ok(())
