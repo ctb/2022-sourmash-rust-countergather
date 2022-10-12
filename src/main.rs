@@ -9,6 +9,8 @@ use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 use std::cmp::PartialOrd;
 
+use std::borrow::Cow;
+
 use sourmash::signature::{Signature, SigsTrait};
 use sourmash::sketch::minhash::{max_hash_for_scaled, KmerMinHash};
 use sourmash::sketch::Sketch;
@@ -58,10 +60,10 @@ fn check_compatible_downsample(
     Ok(())
 }
 
-fn prepare_query(search_sig: &Signature, template: &Sketch) -> Option<KmerMinHash> {
+fn prepare_query<'a>(search_sig: &'a Signature, template: &Sketch) -> Option<Cow<'a, KmerMinHash>> {
     let mut search_mh = None;
     if let Some(Sketch::MinHash(mh)) = search_sig.select_sketch(template) {
-        search_mh = Some(mh.clone());
+        search_mh = Some(Cow::from(mh));
     } else {
         // try to find one that can be downsampled
         if let Sketch::MinHash(template_mh) = template {
@@ -70,7 +72,7 @@ fn prepare_query(search_sig: &Signature, template: &Sketch) -> Option<KmerMinHas
                     if check_compatible_downsample(&ref_mh, template_mh).is_ok() {
                         let max_hash = max_hash_for_scaled(template_mh.scaled());
                         let mh = ref_mh.downsample_max_hash(max_hash).unwrap();
-                        return Some(mh);
+                        return Some(Cow::from(mh));
                     }
                 }
             }
