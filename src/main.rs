@@ -87,13 +87,7 @@ struct PrefetchResult {
 
 impl Ord for PrefetchResult {
     fn cmp(&self, other: &PrefetchResult) -> Ordering {
-        if self.containment < other.containment {
-            Ordering::Less
-        } else if self.containment > other.containment {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
+        self.containment.cmp(&other.containment)
     }
 }
 
@@ -120,11 +114,11 @@ fn prefetch(
         .filter_map(|result| {
             let mut mm = None;
             let searchsig = &result.minhash;
-            let containment = searchsig.count_common(&query, false);
+            let containment = searchsig.count_common(query, false);
             if let Ok(containment) = containment {
                 if containment > 0 {
                     let result = PrefetchResult {
-                        containment: containment,
+                        containment,
                         ..result
                     };
                     mm = Some(result);
@@ -139,10 +133,10 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
     query_filename: P,
     matchlist: P,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let max_hash = max_hash_for_scaled(100000 as u64);
+    let max_hash = max_hash_for_scaled(100000_u64);
     let template_mh = KmerMinHash::builder()
         .num(0u32)
-        .ksize(31 as u32)
+        .ksize(31_u32)
         .max_hash(max_hash)
         .build();
     let template = Sketch::MinHash(template_mh);
@@ -196,7 +190,7 @@ fn do_countergather<P: AsRef<Path> + std::fmt::Debug>(
                             let result = PrefetchResult {
                                 name: sig.name(),
                                 minhash: mh,
-                                containment: containment,
+                                containment,
                             };
                             mm = Some(result);
                             break;
